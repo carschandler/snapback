@@ -1,5 +1,5 @@
 {
-  description = "Rust devshell";
+  description = "Snapback - restore metadata and captions to Snapchat memory exports";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -28,13 +28,33 @@
           ...
         }:
         let
-          naersk-lib = pkgs.callPackage inputs'.naersk { };
+          naersk' = pkgs.callPackage inputs.naersk { };
+
+          runtimeDeps = [
+            pkgs.exiftool
+            pkgs.ffmpeg-headless
+            pkgs.unzip
+          ];
+
+          snapback-unwrapped = naersk'.buildPackage {
+            src = ./.;
+          };
+
+          snapback = pkgs.symlinkJoin {
+            name = "snapback";
+            paths = [ snapback-unwrapped ];
+            nativeBuildInputs = [ pkgs.makeWrapper ];
+            postBuild = ''
+              wrapProgram $out/bin/snapback \
+                --prefix PATH : ${pkgs.lib.makeBinPath runtimeDeps}
+            '';
+          };
         in
         {
-          # Per-system attributes can be defined here. The self' and inputs'
-          # module parameters provide easy access to attributes of the same
-          # system.
-          packages.default = naersk-lib.buildPackage ./.;
+          packages = {
+            default = snapback;
+            unwrapped = snapback-unwrapped;
+          };
 
           devShells.default = pkgs.mkShell {
             buildInputs = [
@@ -43,12 +63,8 @@
               pkgs.rustfmt
               pkgs.rust-analyzer
               pkgs.rustPackages.clippy
-
-              pkgs.exiftool
-              (pkgs.ffmpeg.override { withWebp = true; })
-
-              pkgs.gemini-cli
-            ];
+            ]
+            ++ runtimeDeps;
 
             RUST_SRC_PATH = pkgs.rustPlatform.rustLibSrc;
           };
@@ -56,10 +72,6 @@
           formatter = pkgs.nixfmt-rfc-style;
         };
 
-      flake = {
-        # The usual flake attributes can be defined here, including system-
-        # agnostic ones like nixosModule and system-enumerating ones, although
-        # those are more easily expressed in perSystem.
-      };
+      flake = { };
     };
 }

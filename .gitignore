@@ -6,6 +6,12 @@
 /memories*/
 /chat_media/
 /json/
+/processed_media/
+/html/
+/index.html
+/processed_media*
+
+/result
 
 # Added by cargo
 
