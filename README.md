@@ -1,4 +1,4 @@
-# snapback
+# `snapback`
 
 Restore EXIF metadata (dates, GPS coordinates) and caption overlays to
 exported Snapchat memories.
@@ -38,9 +38,9 @@ nix run github:carschandler/snapback -- --processes 3
 Snapchat splits captions into their own images when exporting. Choose how to
 handle these files using the `--caption` option:
 
-- **ignore** -- skip caption overlays entirely, only move the originals to `--output-dir`
-- **copy** -- create a `_captioned` copy and move both it and the original to `--output-dir`
-- **overwrite** -- apply the caption directly to the original file
+- **ignore**: skip caption overlays entirely, only move the originals to `--output-dir`
+- **copy**: create a `_captioned` copy and move both it and the original to `--output-dir`
+- **overwrite**: apply the caption directly to the original file
 
 ### Processes
 
@@ -107,7 +107,3 @@ processed media to `./processed_media` by default.
 | `-o, --output-dir` | Directory to move processed files into | `./processed_media` |
 | `--media-prefix` | Glob prefix for media directories | `memories` |
 | `-c, --captions` | Caption overlay mode: `ignore`, `copy`, `overwrite` | `copy` |
-
-## License
-
-MIT
