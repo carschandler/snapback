@@ -43,6 +43,8 @@
               pkgs.rustfmt
               pkgs.rust-analyzer
               pkgs.rustPackages.clippy
+
+              pkgs.gemini-cli
             ];
 
             RUST_SRC_PATH = pkgs.rustPlatform.rustLibSrc;
