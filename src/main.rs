@@ -7,6 +7,7 @@ use std::process::Command;
 
 use chrono::{DateTime, NaiveDateTime, Utc};
 use glob::glob;
+use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 use serde::Deserializer;
 use serde::{Deserialize, Serialize};
@@ -46,6 +47,10 @@ struct Args {
     /// How to handle caption overlays: ignore, copy (creates _captioned version), or overwrite
     #[arg(short, long, value_enum, default_value_t = CaptionMode::Copy)]
     captions: CaptionMode,
+
+    /// Skip the unzip step (use if archives are already extracted)
+    #[arg(long, default_value_t = false)]
+    skip_unzip: bool,
 }
 
 fn main() {
@@ -58,35 +63,37 @@ fn main() {
         .unwrap();
 
     // Unzip logic
-    let zip_dir = &args.zip_dir;
-    let zip_pattern = zip_dir.join("*.zip");
-    let zip_pattern_str = zip_pattern.to_str().expect("Invalid zip path pattern");
+    if !args.skip_unzip {
+        let zip_dir = &args.zip_dir;
+        let zip_pattern = zip_dir.join("*.zip");
+        let zip_pattern_str = zip_pattern.to_str().expect("Invalid zip path pattern");
 
-    println!("Looking for zip files in: {}", zip_pattern_str);
+        println!("Looking for zip files in: {}", zip_pattern_str);
 
-    for entry in glob(zip_pattern_str).expect("Failed to read glob pattern for zips") {
-        match entry {
-            Ok(path) => {
-                println!("Unzipping {:?}", path);
-                let status = Command::new("unzip")
-                    .arg("-o") // Overwrite existing files without prompting
-                    .arg(&path)
-                    .arg("-d")
-                    .arg(".") // Extract to current directory
-                    .status();
+        for entry in glob(zip_pattern_str).expect("Failed to read glob pattern for zips") {
+            match entry {
+                Ok(path) => {
+                    println!("Unzipping {:?}", path);
+                    let status = Command::new("unzip")
+                        .arg("-o") // Overwrite existing files without prompting
+                        .arg(&path)
+                        .arg("-d")
+                        .arg(".") // Extract to current directory
+                        .status();
 
-                match status {
-                    Ok(s) => {
-                        if !s.success() {
-                            eprintln!("Unzip failed for {:?}", path);
-                        } else {
-                            println!("Successfully unzipped {:?}", path);
+                    match status {
+                        Ok(s) => {
+                            if !s.success() {
+                                eprintln!("Unzip failed for {:?}", path);
+                            } else {
+                                println!("Successfully unzipped {:?}", path);
+                            }
                         }
+                        Err(e) => eprintln!("Failed to execute unzip for {:?}: {}", path, e),
                     }
-                    Err(e) => eprintln!("Failed to execute unzip for {:?}: {}", path, e),
                 }
+                Err(e) => eprintln!("Glob error: {:?}", e),
             }
-            Err(e) => eprintln!("Glob error: {:?}", e),
         }
     }
 
@@ -125,6 +132,15 @@ fn main() {
 
     let caption_mode = &args.captions;
 
+    let pb = ProgressBar::new(paths.len() as u64);
+    pb.set_style(
+        ProgressStyle::with_template(
+            "Processing {pos}/{len} [{wide_bar:.cyan/blue}] {percent}% ({eta})",
+        )
+        .unwrap()
+        .progress_chars("=> "),
+    );
+
     paths.par_iter().for_each(|path| {
         let file_name_str = path
             .file_name()
@@ -159,10 +175,12 @@ fn main() {
                             if s.success() {
                                 did_exif = true;
                             } else {
-                                eprintln!("ExifTool failed for {:?}", path);
+                                pb.println(format!("ExifTool failed for {:?}", path));
                             }
                         }
-                        Err(e) => eprintln!("Failed to execute ExifTool for {:?}: {}", path, e),
+                        Err(e) => {
+                            pb.println(format!("Failed to execute ExifTool for {:?}: {}", path, e))
+                        }
                     }
                 }
             }
@@ -184,7 +202,8 @@ fn main() {
                         let overlay_path = parent.join(overlay_name);
                         if overlay_path.exists() {
                             // Overlay files are named .png but contain WebP data;
-                            // convert to real PNG for ffmpeg
+                            // convert to real PNG for ffmpeg (ffmpeg's native WebP decoder
+                            // can't handle lossy VP8 with a separate alpha channel).
                             let converted_overlay = path.with_file_name(format!(
                                 "{}_overlay.png",
                                 path.file_stem().unwrap().to_str().unwrap()
@@ -194,23 +213,26 @@ fn main() {
                                     Ok(img) => match img.save(&converted_overlay) {
                                         Ok(()) => &converted_overlay,
                                         Err(e) => {
-                                            eprintln!("Failed to save converted overlay: {}", e);
+                                            pb.println(format!(
+                                                "Failed to save converted overlay: {}",
+                                                e
+                                            ));
                                             &overlay_path
                                         }
                                     },
                                     Err(e) => {
-                                        eprintln!(
+                                        pb.println(format!(
                                             "Failed to decode overlay {:?}: {}",
                                             overlay_path, e
-                                        );
+                                        ));
                                         &overlay_path
                                     }
                                 },
                                 Err(e) => {
-                                    eprintln!(
+                                    pb.println(format!(
                                         "Failed to read overlay file {:?}: {}",
                                         overlay_path, e
-                                    );
+                                    ));
                                     &overlay_path
                                 }
                             };
@@ -222,11 +244,12 @@ fn main() {
                                     let captioned =
                                         path.with_file_name(format!("{}_captioned.{}", stem, ext));
                                     if let Err(e) = fs::copy(path, &captioned) {
-                                        eprintln!(
+                                        pb.println(format!(
                                             "Failed to copy {:?} for captioning: {}",
                                             path, e
-                                        );
+                                        ));
                                         let _ = fs::remove_file(&converted_overlay);
+                                        pb.inc(1);
                                         return;
                                     }
                                     (captioned.clone(), captioned)
@@ -278,22 +301,26 @@ fn main() {
                                 Ok(s) => {
                                     if s.success() {
                                         if let Err(e) = fs::rename(&temp_output, &final_output) {
-                                            eprintln!(
+                                            pb.println(format!(
                                                 "Failed to finalize captioned file {:?}: {}",
                                                 final_output, e
-                                            );
+                                            ));
                                         } else {
                                             did_caption = true;
                                         }
                                     } else {
-                                        eprintln!("FFmpeg failed for caption on {:?}", path);
+                                        pb.println(format!(
+                                            "FFmpeg failed for caption on {:?}",
+                                            path
+                                        ));
                                         let _ = fs::remove_file(&temp_output);
                                         if matches!(caption_mode, CaptionMode::Copy) {
                                             let _ = fs::remove_file(&final_output);
                                         }
                                     }
                                 }
-                                Err(e) => eprintln!("Failed to run FFmpeg for {:?}: {}", path, e),
+                                Err(e) => pb
+                                    .println(format!("Failed to run FFmpeg for {:?}: {}", path, e)),
                             }
                         }
                     }
@@ -303,12 +330,15 @@ fn main() {
 
         // Log once per file
         match (did_exif, did_caption) {
-            (true, true) => println!("Added EXIF data and caption to {}", file_name_str),
-            (true, false) => println!("Added EXIF data to {}", file_name_str),
-            (false, true) => println!("Added caption to {}", file_name_str),
+            (true, true) => pb.println(format!("Added EXIF data and caption to {}", file_name_str)),
+            (true, false) => pb.println(format!("Added EXIF data to {}", file_name_str)),
+            (false, true) => pb.println(format!("Added caption to {}", file_name_str)),
             (false, false) => {}
         }
+        pb.inc(1);
     });
+
+    pb.finish_with_message("Processing complete");
 
     // 3. Move processed media files to output directory
     let output_dir = &args.output_dir;
@@ -317,17 +347,27 @@ fn main() {
         return;
     }
 
+    let move_pb = ProgressBar::new(paths.len() as u64);
+    move_pb.set_style(
+        ProgressStyle::with_template("Moving {pos}/{len} [{wide_bar:.green/dim}] {percent}%")
+            .unwrap()
+            .progress_chars("=> "),
+    );
+
     let mut moved = 0usize;
     for path in &paths {
         let file_name = match path.file_name() {
             Some(name) => name,
-            None => continue,
+            None => {
+                move_pb.inc(1);
+                continue;
+            }
         };
 
         let dest = output_dir.join(file_name);
         match fs::rename(path, &dest) {
             Ok(()) => moved += 1,
-            Err(e) => eprintln!("Failed to move {:?} to {:?}: {}", path, dest, e),
+            Err(e) => move_pb.println(format!("Failed to move {:?} to {:?}: {}", path, dest, e)),
         }
 
         // Also move the _captioned version if it exists (copy mode)
@@ -339,15 +379,18 @@ fn main() {
                 let captioned_dest = output_dir.join(captioned.file_name().unwrap());
                 match fs::rename(&captioned, &captioned_dest) {
                     Ok(()) => moved += 1,
-                    Err(e) => eprintln!(
+                    Err(e) => move_pb.println(format!(
                         "Failed to move {:?} to {:?}: {}",
                         captioned, captioned_dest, e
-                    ),
+                    )),
                 }
             }
         }
+
+        move_pb.inc(1);
     }
 
+    move_pb.finish_and_clear();
     println!("Moved {} files to {:?}", moved, output_dir);
 }
 
