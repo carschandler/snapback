@@ -1,6 +1,11 @@
 .direnv
 
-data/
+*.zip
+
+/data/
+/memories*/
+/chat_media/
+/json/
 
 # Added by cargo
 

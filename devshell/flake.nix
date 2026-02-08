@@ -44,6 +44,9 @@
               pkgs.rust-analyzer
               pkgs.rustPackages.clippy
 
+              pkgs.exiftool
+              (pkgs.ffmpeg.override { withWebp = true; })
+
               pkgs.gemini-cli
             ];
 
