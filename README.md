@@ -42,7 +42,7 @@ images when exporting. Choose how to handle these files using the `--overlays`
 option:
 
 - **overwrite** (*default*): apply the overlay directly to the original file
-- **copy**: create an `_overlaid` copy and move both it and the original to `--output-dir`
+- **copy**: create a `_with_overlay` copy and move both it and the original to `--output-dir`
 - **ignore**: skip overlays entirely, only move the originals to `--output-dir`
 
 ### Processes
