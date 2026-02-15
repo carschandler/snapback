@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, ValueEnum)]
 enum OverlayMode {
-    /// Skip overlays (captions, drawings, stickers, etc.) entirely
+    /// Skip overlays entirely
     Ignore,
     /// Create an _overlaid copy while preserving the original
     Copy,
@@ -23,34 +23,48 @@ enum OverlayMode {
 }
 
 #[derive(Debug, Parser)]
-#[command(version, about, long_about = None)]
+#[command(
+    version,
+    about,
+    long_about = "\
+Restore metadata and overlays to Snapchat memory exports.\n\n\
+Snapback processes a Snapchat data export by:\n\n\
+1. Unzipping exported archive(s) (by default unzips all .zip files in the --zip-dir)\n\
+2. Parsing memories_history.json for dates and GPS coordinates\n\
+3. Writing EXIF/metadata back onto each photo and video via exiftool\n\
+4. Optionally compositing overlay PNGs (captions, stickers, drawings) onto\n\
+   the original media using ffmpeg\n\
+5. Moving the processed files into an output directory\n\n\
+External dependencies: exiftool, ffmpeg, unzip"
+)]
 struct Args {
-    #[arg(short, long, default_value = "./json/memories_history.json")]
-    memories_history_json_path: PathBuf,
-
-    /// Directory containing zip files to unpack
-    #[arg(short, long, default_value = ".")]
-    zip_dir: PathBuf,
+    /// How to handle overlays (captions, drawings, stickers, etc.)
+    #[arg(short, long, value_enum, default_value_t = OverlayMode::Overwrite)]
+    overlays: OverlayMode,
 
     /// Number of concurrent exiftool/ffmpeg processes
     #[arg(short, long, default_value_t = 1)]
     processes: usize,
 
+    /// Directory containing zip files to unpack
+    #[arg(short, long, default_value = ".")]
+    zip_dir: PathBuf,
+
     /// Directory to move processed media files into
     #[arg(short = 'd', long, default_value = "./processed_media")]
     output_dir: PathBuf,
 
-    /// Directory name prefix to glob for media files (e.g. "memories" matches "memories*/**/*.jpg")
-    #[arg(long, default_value = "memories")]
-    media_prefix: String,
-
-    /// How to handle overlays (captions, drawings, stickers, etc.): ignore, copy (creates _overlaid version), or overwrite
-    #[arg(short = 'o', long, value_enum, default_value_t = OverlayMode::Copy)]
-    overlays: OverlayMode,
-
-    /// Skip the unzip step (use if archives are already extracted)
+    /// Skip the unzip step (use if .zip files are already extracted)
     #[arg(long, default_value_t = false)]
     skip_unzip: bool,
+
+    // Path to the "memories_history.json" file from the export
+    #[arg(short = 'j', long, default_value = "./json/memories_history.json")]
+    memories_history_json_path: PathBuf,
+
+    /// Directory name prefix to glob for media files (e.g. "memories" matches "memories*/**/*.jpg")
+    #[arg(short, long, default_value = "memories")]
+    media_prefix: String,
 }
 
 fn main() {
@@ -241,8 +255,8 @@ fn main() {
                             let stem = path.file_stem().unwrap().to_str().unwrap();
                             let (input_path, final_output) = match overlay_mode {
                                 OverlayMode::Copy => {
-                                    let overlaid =
-                                        path.with_file_name(format!("{}_overlaid.{}", stem, ext));
+                                    let overlaid = path
+                                        .with_file_name(format!("{}_with_overlay.{}", stem, ext));
                                     if let Err(e) = fs::copy(path, &overlaid) {
                                         pb.println(format!(
                                             "Failed to copy {:?} for overlay: {}",
