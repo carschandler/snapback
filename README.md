@@ -1,12 +1,12 @@
 # `snapback`
 
-Restore EXIF metadata (dates, GPS coordinates) and caption overlays to
-exported Snapchat memories.
+Restore EXIF metadata (dates, GPS coordinates) and overlays (captions,
+drawings, stickers, etc.) to exported Snapchat memories.
 
 Snapchat data exports strip EXIF metadata from your photos and videos and
-provide it separately in a JSON file. Caption overlays are stored as separate
-WebP images (misleadingly named `.png`). `snapback` reads the metadata JSON,
-applies it back to your media via `exiftool`, composites caption overlays via
+provide it separately in a JSON file. Overlays are stored as separate WebP
+images (misleadingly named `.png`). `snapback` reads the metadata JSON,
+applies it back to your media via `exiftool`, composites overlays via
 `ffmpeg`, and moves the processed files to a unified output directory.
 
 ## Quickstart
@@ -29,18 +29,19 @@ mv ~/Downloads/mydata~*.zip .
 # unzip. By default, it will unzip all the archives in the current directory.
 nix run github:carschandler/snapback -- --help
 # Read the help menu and decide how many processes you want to run
-# simultaneously & how to handle captions
+# simultaneously & how to handle overlays
 nix run github:carschandler/snapback -- --processes 3
 ```
 
-### Caption modes
+### Overlay modes
 
-Snapchat splits captions into their own images when exporting. Choose how to
-handle these files using the `--caption` option:
+Snapchat splits overlays (captions, drawings, stickers, etc.) into their own
+images when exporting. Choose how to handle these files using the `--overlays`
+option:
 
-- **ignore**: skip caption overlays entirely, only move the originals to `--output-dir`
-- **copy**: create a `_captioned` copy and move both it and the original to `--output-dir`
-- **overwrite**: apply the caption directly to the original file
+- **ignore**: skip overlays entirely, only move the originals to `--output-dir`
+- **copy**: create an `_overlaid` copy and move both it and the original to `--output-dir`
+- **overwrite**: apply the overlay directly to the original file
 
 ### Processes
 
@@ -94,7 +95,7 @@ cargo run --release -- --help
 2. Place the `.zip` files in a directory.
 3. Run snapback
 
-This will unzip the archives, apply EXIF metadata, handle captions, and move
+This will unzip the archives, apply EXIF metadata, handle overlays, and move
 processed media to `./processed_media` by default.
 
 ### Options
@@ -104,6 +105,6 @@ processed media to `./processed_media` by default.
 | `-m, --memories-history-json-path` | Path to `memories_history.json` | `./json/memories_history.json` |
 | `-z, --zip-dir` | Directory containing `.zip` files to unpack | `.` |
 | `-p, --processes` | Number of concurrent exiftool/ffmpeg processes | `1` |
-| `-o, --output-dir` | Directory to move processed files into | `./processed_media` |
+| `-d, --output-dir` | Directory to move processed files into | `./processed_media` |
 | `--media-prefix` | Glob prefix for media directories | `memories` |
-| `-c, --captions` | Caption overlay mode: `ignore`, `copy`, `overwrite` | `copy` |
+| `-o, --overlays` | Overlay mode: `ignore`, `copy`, `overwrite` | `copy` |

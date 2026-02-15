@@ -1,5 +1,5 @@
 {
-  description = "Snapback - restore metadata and captions to Snapchat memory exports";
+  description = "Snapback - restore metadata and overlays to Snapchat memory exports";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";

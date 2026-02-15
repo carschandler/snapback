@@ -13,12 +13,12 @@ use serde::Deserializer;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, ValueEnum)]
-enum CaptionMode {
-    /// Skip caption overlays entirely
+enum OverlayMode {
+    /// Skip overlays (captions, drawings, stickers, etc.) entirely
     Ignore,
-    /// Create a _captioned copy while preserving the original
+    /// Create an _overlaid copy while preserving the original
     Copy,
-    /// Apply caption overlay directly to the original file
+    /// Apply overlay directly to the original file
     Overwrite,
 }
 
@@ -37,16 +37,16 @@ struct Args {
     processes: usize,
 
     /// Directory to move processed media files into
-    #[arg(short, long, default_value = "./processed_media")]
+    #[arg(short = 'd', long, default_value = "./processed_media")]
     output_dir: PathBuf,
 
     /// Directory name prefix to glob for media files (e.g. "memories" matches "memories*/**/*.jpg")
     #[arg(long, default_value = "memories")]
     media_prefix: String,
 
-    /// How to handle caption overlays: ignore, copy (creates _captioned version), or overwrite
-    #[arg(short, long, value_enum, default_value_t = CaptionMode::Copy)]
-    captions: CaptionMode,
+    /// How to handle overlays (captions, drawings, stickers, etc.): ignore, copy (creates _overlaid version), or overwrite
+    #[arg(short = 'o', long, value_enum, default_value_t = OverlayMode::Copy)]
+    overlays: OverlayMode,
 
     /// Skip the unzip step (use if archives are already extracted)
     #[arg(long, default_value_t = false)]
@@ -130,7 +130,7 @@ fn main() {
         .filter_map(Result::ok)
         .collect();
 
-    let caption_mode = &args.captions;
+    let overlay_mode = &args.overlays;
 
     let pb = ProgressBar::new(paths.len() as u64);
     pb.set_style(
@@ -149,7 +149,7 @@ fn main() {
             .unwrap_or("?")
             .to_string();
         let mut did_exif = false;
-        let mut did_caption = false;
+        let mut did_overlay = false;
 
         // 1. Apply EXIF metadata
         if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
@@ -186,8 +186,8 @@ fn main() {
             }
         }
 
-        // 2. Apply caption overlay (after EXIF so metadata is already set)
-        if !matches!(caption_mode, CaptionMode::Ignore) {
+        // 2. Apply overlay (after EXIF so metadata is already set)
+        if !matches!(overlay_mode, OverlayMode::Ignore) {
             if let Some(parent) = path.parent() {
                 if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
                     let overlay_filename = if file_name.ends_with("-main.jpg") {
@@ -239,23 +239,23 @@ fn main() {
 
                             let ext = path.extension().unwrap_or_default().to_str().unwrap_or("");
                             let stem = path.file_stem().unwrap().to_str().unwrap();
-                            let (input_path, final_output) = match caption_mode {
-                                CaptionMode::Copy => {
-                                    let captioned =
-                                        path.with_file_name(format!("{}_captioned.{}", stem, ext));
-                                    if let Err(e) = fs::copy(path, &captioned) {
+                            let (input_path, final_output) = match overlay_mode {
+                                OverlayMode::Copy => {
+                                    let overlaid =
+                                        path.with_file_name(format!("{}_overlaid.{}", stem, ext));
+                                    if let Err(e) = fs::copy(path, &overlaid) {
                                         pb.println(format!(
-                                            "Failed to copy {:?} for captioning: {}",
+                                            "Failed to copy {:?} for overlay: {}",
                                             path, e
                                         ));
                                         let _ = fs::remove_file(&converted_overlay);
                                         pb.inc(1);
                                         return;
                                     }
-                                    (captioned.clone(), captioned)
+                                    (overlaid.clone(), overlaid)
                                 }
-                                CaptionMode::Overwrite => (path.to_path_buf(), path.to_path_buf()),
-                                CaptionMode::Ignore => unreachable!(),
+                                OverlayMode::Overwrite => (path.to_path_buf(), path.to_path_buf()),
+                                OverlayMode::Ignore => unreachable!(),
                             };
 
                             let temp_output = path.with_file_name(format!("{}_temp.{}", stem, ext));
@@ -302,19 +302,19 @@ fn main() {
                                     if s.success() {
                                         if let Err(e) = fs::rename(&temp_output, &final_output) {
                                             pb.println(format!(
-                                                "Failed to finalize captioned file {:?}: {}",
+                                                "Failed to finalize overlaid file {:?}: {}",
                                                 final_output, e
                                             ));
                                         } else {
-                                            did_caption = true;
+                                            did_overlay = true;
                                         }
                                     } else {
                                         pb.println(format!(
-                                            "FFmpeg failed for caption on {:?}",
+                                            "FFmpeg failed for overlay on {:?}",
                                             path
                                         ));
                                         let _ = fs::remove_file(&temp_output);
-                                        if matches!(caption_mode, CaptionMode::Copy) {
+                                        if matches!(overlay_mode, OverlayMode::Copy) {
                                             let _ = fs::remove_file(&final_output);
                                         }
                                     }
@@ -329,10 +329,10 @@ fn main() {
         }
 
         // Log once per file
-        match (did_exif, did_caption) {
-            (true, true) => pb.println(format!("Added EXIF data and caption to {}", file_name_str)),
+        match (did_exif, did_overlay) {
+            (true, true) => pb.println(format!("Added EXIF data and overlay to {}", file_name_str)),
             (true, false) => pb.println(format!("Added EXIF data to {}", file_name_str)),
-            (false, true) => pb.println(format!("Added caption to {}", file_name_str)),
+            (false, true) => pb.println(format!("Added overlay to {}", file_name_str)),
             (false, false) => {}
         }
         pb.inc(1);
@@ -370,18 +370,18 @@ fn main() {
             Err(e) => move_pb.println(format!("Failed to move {:?} to {:?}: {}", path, dest, e)),
         }
 
-        // Also move the _captioned version if it exists (copy mode)
-        if matches!(args.captions, CaptionMode::Copy) {
+        // Also move the _overlaid version if it exists (copy mode)
+        if matches!(args.overlays, OverlayMode::Copy) {
             let ext = path.extension().unwrap_or_default().to_str().unwrap_or("");
             let stem = path.file_stem().unwrap().to_str().unwrap();
-            let captioned = path.with_file_name(format!("{}_captioned.{}", stem, ext));
-            if captioned.exists() {
-                let captioned_dest = output_dir.join(captioned.file_name().unwrap());
-                match fs::rename(&captioned, &captioned_dest) {
+            let overlaid = path.with_file_name(format!("{}_overlaid.{}", stem, ext));
+            if overlaid.exists() {
+                let overlaid_dest = output_dir.join(overlaid.file_name().unwrap());
+                match fs::rename(&overlaid, &overlaid_dest) {
                     Ok(()) => moved += 1,
                     Err(e) => move_pb.println(format!(
                         "Failed to move {:?} to {:?}: {}",
-                        captioned, captioned_dest, e
+                        overlaid, overlaid_dest, e
                     )),
                 }
             }

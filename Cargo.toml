@@ -2,7 +2,7 @@
 name = "snapback"
 version = "0.1.0"
 edition = "2021"
-description = "Restore metadata and captions to Snapchat memory exports"
+description = "Restore metadata and overlays to Snapchat memory exports"
 license = "MIT"
 repository = "https://github.com/carschandler/snapback"
 
