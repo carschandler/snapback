@@ -15,12 +15,12 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, ValueEnum)]
 enum OverlayMode {
-    /// Skip overlays entirely
-    Ignore,
-    /// Create an _overlaid copy while preserving the original
-    Copy,
     /// Apply overlay directly to the original file
     Overwrite,
+    /// Create an _overlaid copy while preserving the original
+    Copy,
+    /// Skip overlays entirely
+    Ignore,
 }
 
 #[derive(Debug, Parser)]

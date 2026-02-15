@@ -20,7 +20,7 @@ applies it back to your media via `exiftool`, composites overlays via
    the "My Data" page above and download all of the `.zip` files.
 3. Run the following commands:
 
-```
+```bash
 mkdir ~/path/to/snapchat_export
 cd ~/path/to/snapchat_export
 mv ~/Downloads/mydata~*.zip .
@@ -31,6 +31,8 @@ nix run github:carschandler/snapback -- --help
 # Read the help menu and decide how many processes you want to run
 # simultaneously & how to handle overlays
 nix run github:carschandler/snapback -- --processes 3
+# Results here
+ls ./processed_media
 ```
 
 ### Overlay modes
@@ -39,17 +41,17 @@ Snapchat splits overlays (captions, drawings, stickers, etc.) into their own
 images when exporting. Choose how to handle these files using the `--overlays`
 option:
 
-- **ignore**: skip overlays entirely, only move the originals to `--output-dir`
+- **overwrite** (*default*): apply the overlay directly to the original file
 - **copy**: create an `_overlaid` copy and move both it and the original to `--output-dir`
-- **overwrite**: apply the overlay directly to the original file
+- **ignore**: skip overlays entirely, only move the originals to `--output-dir`
 
 ### Processes
 
 If you aren't sure how many processes your system can handle, don't push it too
 far; you'll reach a point of diminishing returns. On an M3 Pro chip, I'm just
-using 5 and my computer does get a bit toasty after a while. When in doubt, just
+using 5 and my machine does get a bit toasty after a while. When in doubt, just
 omit this argument and a single process will be used, then just leave it running
-for a while.
+for longer.
 
 ## Prerequisites
 
@@ -58,6 +60,7 @@ ensure the following are installed:
 
 - [exiftool](https://exiftool.org/)
 - [ffmpeg](https://ffmpeg.org/) (headless variant is fine)
+
 While many versions of these tools may work, this package has only been tested
 using `exiftool v13.39` and `ffmpeg v8.0.1`.
 
@@ -86,23 +89,3 @@ git clone https://github.com/carschandler/snapback
 cd snapback
 cargo run --release -- --help
 ```
-
-## Usage
-
-1. Download your data from Snapchat (Settings > My Data).
-2. Place the `.zip` files in a directory.
-3. Run snapback
-
-This will unzip the archives, apply EXIF metadata, handle overlays, and move
-processed media to `./processed_media` by default.
-
-### Options
-
-| Flag | Description | Default |
-|------|-------------|---------|
-| `-m, --memories-history-json-path` | Path to `memories_history.json` | `./json/memories_history.json` |
-| `-z, --zip-dir` | Directory containing `.zip` files to unpack | `.` |
-| `-p, --processes` | Number of concurrent exiftool/ffmpeg processes | `1` |
-| `-d, --output-dir` | Directory to move processed files into | `./processed_media` |
-| `--media-prefix` | Glob prefix for media directories | `memories` |
-| `-o, --overlays` | Overlay mode: `ignore`, `copy`, `overwrite` | `copy` |
