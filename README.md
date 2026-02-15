@@ -58,10 +58,8 @@ ensure the following are installed:
 
 - [exiftool](https://exiftool.org/)
 - [ffmpeg](https://ffmpeg.org/) (headless variant is fine)
-- [unzip](https://infozip.sourceforge.net/)
-
 While many versions of these tools may work, this package has only been tested
-using `exiftool v13.39`, `ffmpeg v8.0.1`, `unzip v6.00`).
+using `exiftool v13.39` and `ffmpeg v8.0.1`.
 
 ## Installation
 
@@ -79,7 +77,7 @@ nix run github:carschandler/snapback -- --help
 cargo install --git https://github.com/carschandler/snapback
 ```
 
-Ensure `exiftool`, `ffmpeg`, and `unzip` are on your `PATH` 
+Ensure `exiftool` and `ffmpeg` are on your `PATH`.
 
 ### From source
 

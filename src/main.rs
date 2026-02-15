@@ -9,6 +9,7 @@ use chrono::{DateTime, NaiveDateTime, Utc};
 use glob::glob;
 use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
+use ripunzip::{NullProgressReporter, UnzipEngine, UnzipOptions};
 use serde::Deserializer;
 use serde::{Deserialize, Serialize};
 
@@ -35,7 +36,7 @@ Snapback processes a Snapchat data export by:\n\n\
 4. Optionally compositing overlay PNGs (captions, stickers, drawings) onto\n\
    the original media using ffmpeg\n\
 5. Moving the processed files into an output directory\n\n\
-External dependencies: exiftool, ffmpeg, unzip"
+External dependencies: exiftool, ffmpeg"
 )]
 struct Args {
     /// How to handle overlays (captions, drawings, stickers, etc.)
@@ -76,7 +77,7 @@ fn main() {
         .build_global()
         .unwrap();
 
-    // Unzip logic
+    // Unzip logic (using ripunzip for parallel extraction)
     if !args.skip_unzip {
         let zip_dir = &args.zip_dir;
         let zip_pattern = zip_dir.join("*.zip");
@@ -88,22 +89,28 @@ fn main() {
             match entry {
                 Ok(path) => {
                     println!("Unzipping {:?}", path);
-                    let status = Command::new("unzip")
-                        .arg("-o") // Overwrite existing files without prompting
-                        .arg(&path)
-                        .arg("-d")
-                        .arg(".") // Extract to current directory
-                        .status();
-
-                    match status {
-                        Ok(s) => {
-                            if !s.success() {
-                                eprintln!("Unzip failed for {:?}", path);
-                            } else {
-                                println!("Successfully unzipped {:?}", path);
+                    let zip_file = match fs::File::open(&path) {
+                        Ok(f) => f,
+                        Err(e) => {
+                            eprintln!("Failed to open zip {:?}: {}", path, e);
+                            continue;
+                        }
+                    };
+                    match UnzipEngine::for_file(zip_file) {
+                        Ok(engine) => {
+                            let options = UnzipOptions {
+                                output_directory: Some(PathBuf::from(".")),
+                                password: None,
+                                single_threaded: false,
+                                filename_filter: None,
+                                progress_reporter: Box::new(NullProgressReporter),
+                            };
+                            match engine.unzip(options) {
+                                Ok(()) => println!("Successfully unzipped {:?}", path),
+                                Err(e) => eprintln!("Unzip failed for {:?}: {}", path, e),
                             }
                         }
-                        Err(e) => eprintln!("Failed to execute unzip for {:?}: {}", path, e),
+                        Err(e) => eprintln!("Failed to open zip {:?}: {}", path, e),
                     }
                 }
                 Err(e) => eprintln!("Glob error: {:?}", e),
